@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.13)
 
 set(basic_coroutine_test_target_name basic_coro_test)
+set(c_coroutines_test_target_name c_coro_test)
 
 # initialize project
-project(kernel coroutine VERSION 1.0 DESCRIPTION "help" LANGUAGES C CXX ASM)
+project(kernel_coroutine VERSION 1.0 DESCRIPTION "help" LANGUAGES C CXX ASM)
 
 # set standards
 set(CMAKE_C_STANDARD 11)
@@ -23,4 +24,6 @@ endif()
 
 file(GLOB_RECURSE SRC_FILES "src/*.cpp")
 
-add_executable(${basic_coroutine_test_target_name} basic_coroutine_test.cpp)
+
+add_executable(${c_coroutines_test_target_name} c_coro_test.c)
+add_executable(${basic_coroutine_test_target_name} basic_coro_test.cpp)
