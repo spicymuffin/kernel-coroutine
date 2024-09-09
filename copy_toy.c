@@ -27,7 +27,7 @@ void coroutine(coroutine_context* ctx, int* total_ops)
     {
     case INITIALIZING:
         ctx->exec_state = EXECUTING;
-        // __builtin_prefetch(data_from + ctx->copy_indx, 0, 1);
+        __builtin_prefetch(data_from + ctx->copy_indx, 0, 1);
         // __builtin_prefetch(data_to + ctx->copy_indx, 1, 1);
         return;
 
@@ -57,55 +57,75 @@ int main()
 {
     init_data();
 
+    float sum = 0;
+    int cnt = 10;
+
     for (int num_coroutines = 1; num_coroutines <= 30; num_coroutines++)
     {
-        int total_ops = 0;
-        int copy_indx = 0;
-        coroutine_context* ctxs = malloc(num_coroutines * sizeof(coroutine_context));
-
-        for (int i = 0; i < num_coroutines; i++)
+        for (int k = 0; k < cnt; k++)
         {
-            ctxs[i].exec_state = INITIALIZING;
-            ctxs[i].copy_indx = copy_indx;
-            copy_indx++;
-        }
+            int total_ops = 0;
+            int copy_indx = 0;
+            coroutine_context* ctxs = malloc(num_coroutines * sizeof(coroutine_context));
 
-        int coroutines_active = num_coroutines;
-        clock_t start_time = clock();
-
-        while (coroutines_active > 0)
-        {
             for (int i = 0; i < num_coroutines; i++)
             {
-                if (ctxs[i].exec_state != UNUSED)
+                ctxs[i].exec_state = INITIALIZING;
+                ctxs[i].copy_indx = copy_indx;
+                copy_indx++;
+            }
+
+            int coroutines_active = num_coroutines;
+            clock_t start_time = clock();
+
+            while (coroutines_active > 0)
+            {
+                for (int i = 0; i < num_coroutines; i++)
                 {
-                    if (ctxs[i].exec_state != SWITCHING)
+                    if (ctxs[i].exec_state != UNUSED)
                     {
-                        coroutine(&ctxs[i], &total_ops);
-                    }
-                    else
-                    {
-                        if (copy_indx < OPCNT)
+                        if (ctxs[i].exec_state != SWITCHING)
                         {
-                            ctxs[i].exec_state = INITIALIZING;
-                            ctxs[i].copy_indx = copy_indx;
-                            copy_indx++;
+                            coroutine(&ctxs[i], &total_ops);
                         }
                         else
                         {
-                            ctxs[i].exec_state = UNUSED;
-                            coroutines_active--;
+                            if (copy_indx < OPCNT)
+                            {
+                                ctxs[i].exec_state = INITIALIZING;
+                                ctxs[i].copy_indx = copy_indx;
+                                copy_indx++;
+                            }
+                            else
+                            {
+                                ctxs[i].exec_state = UNUSED;
+                                coroutines_active--;
+                            }
                         }
                     }
                 }
             }
-        }
 
-        clock_t end_time = clock();
-        double elapsed_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-        double mops = total_ops / (elapsed_time * 1e6);
-        printf("Total ops with %d coroutines: %d, MOPS: %f\n", num_coroutines, total_ops, mops);
-        free(ctxs);
+            clock_t end_time = clock();
+            double elapsed_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
+            double mops = total_ops / (elapsed_time * 1e6);
+            // printf("Total ops with %d coroutines: %d, MOPS: %f\n", num_coroutines, total_ops, mops);
+            int indx = random_in_range(0, OPCNT);
+            // printf("data @ %d: %c - %c\n", indx, data_from[indx], data_to[indx]);
+
+            for (int i = 0; i < OPCNT; i++)
+            {
+                data_to[indx] = '0';
+            }
+
+            sum += mops;
+            free(ctxs);
+        }
+        printf("%d %f\n", num_coroutines, sum / cnt);
+        sum = 0;
     }
+
+    // printf("avg: %d\n", sum / cnt);
+
     return 0;
 }
