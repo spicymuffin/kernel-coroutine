@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define OPCNT 10000000
+#define OPCNT 1024 * 1024 * 10
+#define CPYBATCHSZ 32
 
 // util
 int random_in_range(int min, int max)
@@ -18,6 +19,8 @@ typedef struct
     int copy_indx;
 } coroutine_context;
 
+int access_pattern[OPCNT];
+
 char data_from[OPCNT];
 char data_to[OPCNT];
 
@@ -27,13 +30,18 @@ void coroutine(coroutine_context* ctx, int* total_ops)
     {
     case INITIALIZING:
         ctx->exec_state = EXECUTING;
+        // prefetch address, 0-read/1-write, locality (im not sure what this does)
         __builtin_prefetch(data_from + ctx->copy_indx, 0, 1);
-        // __builtin_prefetch(data_to + ctx->copy_indx, 1, 1);
+        __builtin_prefetch(data_to + ctx->copy_indx, 1, 1);
         return;
 
     case EXECUTING:
         (*total_ops)++;
+        // for (int i = 0; i < CPYBATCHSZ; i++)
+        // {
         data_to[ctx->copy_indx] = data_from[ctx->copy_indx];
+        // }
+
         ctx->exec_state = SWITCHING;
         return;
 
@@ -45,17 +53,36 @@ void coroutine(coroutine_context* ctx, int* total_ops)
 
 void init_data()
 {
-    printf("initializing data\n");
     for (int i = 0; i < OPCNT; i++)
     {
         data_from[i] = random_in_range(0, 255);
     }
-    printf("initializing data done\n");
+}
+
+// generates an array of access indices:
+// [0, 1, 2, 3, 4, 5] gets scrambled to
+// [3, 5, 0, 2, 4, 1] to confuse the hardware prefetcher
+void generate_access_pattern(int* arr, int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        arr[i] = i;
+    }
+
+    for (int i = 0; i < n; i++)
+    {
+        int indx = random_in_range(i, n - 1);
+        int tmp = arr[i];
+        arr[i] = arr[indx];
+        arr[indx] = tmp;
+    }
 }
 
 int main()
 {
     init_data();
+    generate_access_pattern(access_pattern, OPCNT);
+    printf("init seq completed\n");
 
     float sum = 0;
     int cnt = 10;
@@ -71,7 +98,7 @@ int main()
             for (int i = 0; i < num_coroutines; i++)
             {
                 ctxs[i].exec_state = INITIALIZING;
-                ctxs[i].copy_indx = copy_indx;
+                ctxs[i].copy_indx = access_pattern[copy_indx];
                 copy_indx++;
             }
 
@@ -93,7 +120,7 @@ int main()
                             if (copy_indx < OPCNT)
                             {
                                 ctxs[i].exec_state = INITIALIZING;
-                                ctxs[i].copy_indx = copy_indx;
+                                ctxs[i].copy_indx = access_pattern[copy_indx];
                                 copy_indx++;
                             }
                             else

@@ -18,7 +18,8 @@ add_compile_options(-Wall
 
 
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    add_compile_options(-Wno-maybe-uninitialized)
+    add_compile_options(-Wno-maybe-uninitialized
+                        -save-temps)
 
 endif()
 
