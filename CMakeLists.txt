@@ -17,6 +17,7 @@ add_compile_options(-Wall
         )
 
 
+message(STATUS "C Compiler ID: ${CMAKE_C_COMPILER_ID}")
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-Wno-maybe-uninitialized
                         -save-temps)
