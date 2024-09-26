@@ -67,12 +67,11 @@ void coroutine(coroutine_context* ctx, int* total_ops)
         return;
 
     case EXECUTING:
-        (*total_ops)++;
         for (int i = 0; i < copy_batch; i++)
         {
-            array_to[ctx->copy_indx] = array_from[ctx->copy_indx];
+            array_to[ctx->copy_indx + i] = array_from[ctx->copy_indx + i];
+            (*total_ops)++;
         }
-
         ctx->exec_state = SWITCHING;
         return;
 
@@ -94,7 +93,7 @@ int init()
     // initialize the arrays (allocate alligned arrays)
     if (posix_memalign((void**)&array_to, alignment, num_elements * sizeof(int)) != 0)
     {
-        return 1; // allocation failed
+        return 2; // allocation failed
     }
 
     for (int i = 0; i < num_elements; i++)
@@ -123,12 +122,17 @@ int main()
         return 1;
     }
 
+    float sum = 0;
+    int cnt = 100;
+
     printf("init seq completed\n");
 
-    float sum = 0;
-    int cnt = 10;
+    printf("1 to 30, avg of %d\n", cnt);
+    printf("num_elements: %d\n", num_elements);
+    printf("copy_batch: %d\n", copy_batch);
 
-    for (int num_coroutines = 1; num_coroutines <= 30; num_coroutines++)
+
+    for (int num_coroutines = 1; num_coroutines <= 30; num_coroutines+=2)
     {
         for (int k = 0; k < cnt; k++)
         {
@@ -162,7 +166,7 @@ int main()
                             {
                                 ctxs[i].exec_state = INITIALIZING;
                                 ctxs[i].copy_indx = copy_indx;
-                                copy_indx++;
+                                copy_indx += copy_batch;
                             }
                             else
                             {
@@ -183,7 +187,7 @@ int main()
 
             for (int i = 0; i < num_elements; i++)
             {
-                array_to = 0;
+                array_to[i] = 0;
             }
 
             sum += mops;

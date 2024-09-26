@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.13)
 
-set(c_coroutines_test_target_name0 copy_toy)
-set(c_coroutines_test_target_name1 coro)
+set(exec1 coro_copy)
+set(exec2 regular_copy)
+set(exec3 nm3)
 
 # initialize project
 project(kernel_coroutine VERSION 1.0 DESCRIPTION "help" LANGUAGES C CXX ASM)
@@ -27,5 +28,6 @@ endif()
 file(GLOB_RECURSE SRC_FILES "src/*.c")
 
 
-add_executable(${c_coroutines_test_target_name0} copy_toy.c)
-add_executable(${c_coroutines_test_target_name1} coro.c)
+add_executable(${exec1} coro_copy_toy.c)
+add_executable(${exec2} regular_copy_toy.c)
+add_executable(${exec3} coro.c)
