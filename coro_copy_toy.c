@@ -90,7 +90,6 @@ int init()
     {
         return 1; // allocation failed
     }
-    // initialize the arrays (allocate alligned arrays)
     if (posix_memalign((void**)&array_to, alignment, num_elements * sizeof(int)) != 0)
     {
         return 2; // allocation failed
