@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 
 // util
 int random_in_range(int min, int max)
@@ -127,8 +128,8 @@ int main()
     printf("init seq completed\n");
 
     printf("1 to 30, avg of %d\n", cnt);
-    printf("num_elements: %d\n", num_elements);
-    printf("copy_batch: %d\n", copy_batch);
+    printf("num_elements: %lu\n", num_elements);
+    printf("copy_batch: %lu\n", copy_batch);
 
 
     for (int num_coroutines = 1; num_coroutines <= 30; num_coroutines+=2)

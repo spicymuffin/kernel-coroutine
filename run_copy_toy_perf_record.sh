@@ -1,0 +1,1 @@
+sudo perf record --call-graph fp -F 10000 -e LLC-load-misses:k -o perf.data -- ./copy_toy
