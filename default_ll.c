@@ -4,7 +4,6 @@
 typedef struct ll_node
 {
     int value;
-    int access_point_index; // the index of the access point that this node belongs to
     struct ll_node* next;
     struct ll_node* prev;
 } ll_node_t;
@@ -12,19 +11,12 @@ typedef struct ll_node
 #define N_BLOCKS 1024
 #define N_ACCESS_POINTS 4
 
-#define PREFETCH 0
-
-
 FILE* file;
 char line[1024];
 int intermediate_ptr = 0;
 
 ll_node_t* head = NULL;
 ll_node_t* node_ptrs[N_BLOCKS];
-
-
-int pos = 0; // active access point index
-ll_node_t access_points[N_ACCESS_POINTS];
 
 // delete node (unsafe - does not check if node is head)
 inline void delete_node(ll_node_t* node)
@@ -72,21 +64,6 @@ void ll_delete_by_reference(ll_node_t* node)
     delete_node(node);
 }
 
-void skiplist_delete_single()
-{
-    ll_node_t* deleted = access_points[pos].next;
-
-}
-
-void skiplist_insert_single()
-{
-
-}
-
-void skiplist_delete_by_reference(ll_node_t* node)
-{
-
-}
 
 int main(int argc, char* argv[])
 {
