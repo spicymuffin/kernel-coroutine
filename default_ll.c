@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h> 
 
+#include "common.c"
+
 typedef struct ll_node
 {
     int value;
@@ -8,39 +10,16 @@ typedef struct ll_node
     struct ll_node* prev;
 } ll_node_t;
 
-#define N_BLOCKS 1024
-#define N_ACCESS_POINTS 4
+int NBLOCKS = 0;
+int NFREE = 0;
 
 FILE* file;
 char line[1024];
 int intermediate_ptr = 0;
 
 ll_node_t* head = NULL;
-ll_node_t* node_ptrs[N_BLOCKS];
+ll_node_t* list = NULL;
 
-// delete node (unsafe - does not check if node is head)
-inline void delete_node(ll_node_t* node)
-{
-    ll_node_t* prev = node->prev;
-    ll_node_t* next = node->next;
-
-    prev->next = next;
-    next->prev = prev;
-
-    free(node);
-}
-
-// insert node after insert_after
-inline void insert_node(ll_node_t* insert_after, ll_node_t* node)
-{
-    ll_node_t* next = insert_after->next;
-
-    insert_after->next = node;
-    node->prev = insert_after;
-
-    node->next = next;
-    next->prev = node;
-}
 
 void ll_delete_after_head()
 {
@@ -48,27 +27,25 @@ void ll_delete_after_head()
     {
         // empty list
         // treat as critical error
-        perror("ll_delete_after_head: empty list");
+        perror("err: ll_delete_after_head - empty list");
         exit(1);
     }
-    delete_node(head->next);
+    DELETE_NODE(head->next);
 }
 
 void ll_insert_after_head(ll_node_t* node)
 {
-    insert_node(head, node);
+    INSERT_NODE_AFTER(head, node);
 }
 
 void ll_delete_by_reference(ll_node_t* node)
 {
-    delete_node(node);
+    DELETE_NODE(node);
 }
 
 
 int main(int argc, char* argv[])
 {
-
-
     // quick sanity check
     if (argc < 3)
     {
@@ -76,61 +53,56 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // populate the skiplist
-    head = (ll_node_t*)malloc(sizeof(ll_node_t));
-
-    if (head == NULL)
-    {
-        perror("error allocating memory");
-        return 1;
-    }
-
-    for (int i = 0; i < N_BLOCKS; i++)
-    {
-        node_ptrs[i] = (ll_node_t*)malloc(sizeof(ll_node_t));
-        if (node_ptrs[i] == NULL)
-        {
-            perror("error allocating memory");
-            return 1;
-        }
-    }
-
     // open file with allocation map
     file = fopen(argv[1], "r");
     if (file == NULL)
     {
-        perror("error opening file");
+        perror("err: opening allocation map");
         return 1;
     }
 
+    // populate the linked list
+    head = (ll_node_t*)malloc(sizeof(ll_node_t));
+
+    if (head == NULL)
+    {
+        perror("err: allocating memory for head");
+        return 1;
+    }
+
+
+    if (fgets(line, sizeof(line), file) != NULL)
+    {
+        NBLOCKS = atoi(line);
+    }
+
+    if (fgets(line, sizeof(line), file) != NULL)
+    {
+        NFREE = atoi(line);
+    }
+
+    list = (ll_node_t*)malloc(NBLOCKS * sizeof(ll_node_t));
+
+    if (list == NULL)
+    {
+        perror("err: allocating memory for list");
+        return 1;
+    }
+
+    // populate the linked list
     int i = 0;
     ll_node_t* prev = head;
-
     while (fgets(line, sizeof(line), file))
     {
-        int start, len, pos, allocation;
-
-        ll_node_t* c = NULL;
-
-        allocation = sscanf(line, "%d %d %d", &start, &len, &pos);
-        if (allocation != 3)
+        int free = atoi(line);
+        if (free)
         {
-            fprintf(stderr, "error reading allocation map\n");
-            return 1;
-        }
-
-
-        printf("allocating %d blocks starting at %d at %d\n", len, start, pos);
-        for (int j = 0; j < len; j++)
-        {
-            c = node_ptrs[pos + j];
-            c->value = i;
-
-            prev->next = c;
-            c->prev = prev;
-
-            prev = c;
+            ll_node_t* node = &list[i];
+            node->value = i;
+            prev->next = node;
+            node->prev = prev;
             i++;
+            prev = node;
         }
     }
 
@@ -140,7 +112,7 @@ int main(int argc, char* argv[])
 
     fclose(file);
 
-    // check if the skiplist is correctly populated
+    // check if the linked list is correctly populated
     ll_node_t* current = head->next;
     int value = 0;
     while (current != head)
@@ -148,35 +120,14 @@ int main(int argc, char* argv[])
         printf("current: %d\n", current->value);
         if (current->value != value)
         {
-            perror("error populating skiplist\n");
+            perror("err: populating linked list\n");
             return 1;
         }
         current = current->next;
         value++;
     }
 
-    printf("allocated %d blocks\n", i);
-
-    // place intermediate pointers
-    int segment_length = N_BLOCKS / N_ACCESS_POINTS;
-    printf("segment length: %d\n", segment_length);
-    current = head->next;
-    for (int i = 0; i < N_ACCESS_POINTS; i++)
-    {
-        access_points[i].next = current;
-        access_points[i].value = current->value;
-
-        for (int j = 0; j < segment_length; j++)
-        {
-            current = current->next;
-        }
-    }
-
-    // check if the access_points pointers are correctly placed
-    for (int i = 0; i < N_ACCESS_POINTS; i++)
-    {
-        printf("access_points[%d]: %d\n", i, access_points[i].value);
-    }
+    printf("%d blocks free\n", i);
 
     // open file with requests
     file = fopen(argv[2], "r");
@@ -188,11 +139,12 @@ int main(int argc, char* argv[])
 
     while (fgets(line, sizeof(line), file))
     {
+        int values_read;
         int request_size = 0;
         char request_type = 0;
-        scanf(line, "%c %d", &request_type, &request_size);
-        #if PREFETCH
-        #else
+
+        values_read = sscanf(line, "%c %d", &request_type, &request_size);
+
         // allocate so remove from free list
         if (request_type == 'a')
         {
@@ -208,7 +160,6 @@ int main(int argc, char* argv[])
         {
 
         }
-        #endif
     }
 
     fclose(file);

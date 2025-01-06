@@ -1,11 +1,8 @@
 main:
-	gcc -Wall -O0 -o copy_toy copy_toy.c
-
-skiplist:
-	gcc -Wall -O2 -o skiplist skiplist.c
+	gcc -Wall -O2 -o skiplist skiplist.c common.c
+	gcc -Wall -O2 -o default_ll default_ll.c common.c
 
 clean:
-	rm -f copy_toy \
-	rm -f hello \
-	rm -f skiplist \  
-	rm -f *.o \ 
+	rm -f default_ll
+	rm -f skiplist
+	rm -f *.o

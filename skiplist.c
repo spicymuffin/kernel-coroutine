@@ -1,97 +1,85 @@
 #include <stdio.h>
 #include <stdlib.h> 
 
-typedef struct ll_node
+#include "common.c"
+
+typedef struct skiplist_node
 {
     int value;
     int access_point_index; // the index of the access point that this node belongs to
-    struct ll_node* next;
-    struct ll_node* prev;
-} ll_node_t;
+    struct skiplist_node* next;
+    struct skiplist_node* prev;
+} skiplist_node_t;
 
-#define N_BLOCKS 1024
 #define N_ACCESS_POINTS 4
 
-#define PREFETCH 0
+int NBLOCKS = 0;
+int NFREE = 0;
 
+int SEGMENT_LEN = 0;
 
 FILE* file;
 char line[1024];
 int intermediate_ptr = 0;
 
-ll_node_t* head = NULL;
-ll_node_t* node_ptrs[N_BLOCKS];
-
+skiplist_node_t* head = NULL;
+skiplist_node_t* list = NULL;
 
 int pos = 0; // active access point index
-ll_node_t access_points[N_ACCESS_POINTS];
+skiplist_node_t access_points[N_ACCESS_POINTS];
 
-// delete node (unsafe - does not check if node is head)
-inline void delete_node(ll_node_t* node)
+inline void increment_pos()
 {
-    ll_node_t* prev = node->prev;
-    ll_node_t* next = node->next;
-
-    prev->next = next;
-    next->prev = prev;
-
-    free(node);
+    pos = (pos + 1) % N_ACCESS_POINTS;
 }
 
-// insert node after insert_after
-inline void insert_node(ll_node_t* insert_after, ll_node_t* node)
+inline void decrement_pos()
 {
-    ll_node_t* next = insert_after->next;
-
-    insert_after->next = node;
-    node->prev = insert_after;
-
-    node->next = next;
-    next->prev = node;
-}
-
-void ll_delete_after_head()
-{
-    if (head->next == head)
-    {
-        // empty list
-        // treat as critical error
-        perror("ll_delete_after_head: empty list");
-        exit(1);
-    }
-    delete_node(head->next);
-}
-
-void ll_insert_after_head(ll_node_t* node)
-{
-    insert_node(head, node);
-}
-
-void ll_delete_by_reference(ll_node_t* node)
-{
-    delete_node(node);
+    pos = (pos - 1 + N_ACCESS_POINTS) % N_ACCESS_POINTS;
 }
 
 void skiplist_delete_single()
 {
-    ll_node_t* deleted = access_points[pos].next;
-
+    skiplist_node_t* deleted = access_points[pos].next;
+    DELETE_NODE(deleted);
+    increment_pos();
 }
 
-void skiplist_insert_single()
+void skiplist_insert_single(skiplist_node_t* node)
 {
-
+    decrement_pos();
+    skiplist_node_t* insert_before = access_points[pos].next;
+    INSERT_NODE_BEFORE(insert_before, node);
+    node->access_point_index = pos;
 }
 
-void skiplist_delete_by_reference(ll_node_t* node)
+void skiplist_delete_by_reference(skiplist_node_t* node)
 {
+    if (node->access_point_index == pos)
+    {
+        DELETE_NODE(node);
+        increment_pos();
+    }
+    else
+    {
+        // node that we are going to move to rebalance access points
+        skiplist_node_t* rebalancing_node = access_points[pos].next;
+        // remove rebalancing node from rebalancing access point so its dangling
+        DELETE_NODE(rebalancing_node);
 
+        // implicit removal of node from its access point
+        skiplist_node_t* next = node->next;
+        rebalancing_node->prev = &access_points[node->access_point_index];
+        access_points[node->access_point_index].next = rebalancing_node;
+        rebalancing_node->next = next;
+        next->prev = rebalancing_node;
+
+        increment_pos();
+    }
 }
 
 int main(int argc, char* argv[])
 {
-
-
     // quick sanity check
     if (argc < 3)
     {
@@ -99,61 +87,56 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // populate the skiplist
-    head = (ll_node_t*)malloc(sizeof(ll_node_t));
-
-    if (head == NULL)
-    {
-        perror("error allocating memory");
-        return 1;
-    }
-
-    for (int i = 0; i < N_BLOCKS; i++)
-    {
-        node_ptrs[i] = (ll_node_t*)malloc(sizeof(ll_node_t));
-        if (node_ptrs[i] == NULL)
-        {
-            perror("error allocating memory");
-            return 1;
-        }
-    }
-
     // open file with allocation map
     file = fopen(argv[1], "r");
     if (file == NULL)
     {
-        perror("error opening file");
+        perror("err: opening allocation map");
         return 1;
     }
 
-    int i = 0;
-    ll_node_t* prev = head;
+    // populate the linked list
+    head = (skiplist_node_t*)malloc(sizeof(skiplist_node_t));
 
+    if (head == NULL)
+    {
+        perror("err: allocating memory for head");
+        return 1;
+    }
+
+
+    if (fgets(line, sizeof(line), file) != NULL)
+    {
+        NBLOCKS = atoi(line);
+    }
+
+    if (fgets(line, sizeof(line), file) != NULL)
+    {
+        NFREE = atoi(line);
+    }
+
+    list = (skiplist_node_t*)malloc(NBLOCKS * sizeof(skiplist_node_t));
+
+    if (list == NULL)
+    {
+        perror("err: allocating memory for list");
+        return 1;
+    }
+
+    // populate the linked list
+    int v = 0;
+    skiplist_node_t* prev = head;
     while (fgets(line, sizeof(line), file))
     {
-        int start, len, pos, allocation;
-
-        ll_node_t* c = NULL;
-
-        allocation = sscanf(line, "%d %d %d", &start, &len, &pos);
-        if (allocation != 3)
+        int free = atoi(line);
+        if (free)
         {
-            fprintf(stderr, "error reading allocation map\n");
-            return 1;
-        }
-
-
-        printf("allocating %d blocks starting at %d at %d\n", len, start, pos);
-        for (int j = 0; j < len; j++)
-        {
-            c = node_ptrs[pos + j];
-            c->value = i;
-
-            prev->next = c;
-            c->prev = prev;
-
-            prev = c;
-            i++;
+            skiplist_node_t* node = &list[v];
+            node->value = v;
+            prev->next = node;
+            node->prev = prev;
+            v++;
+            prev = node;
         }
     }
 
@@ -163,42 +146,42 @@ int main(int argc, char* argv[])
 
     fclose(file);
 
-    // check if the skiplist is correctly populated
-    ll_node_t* current = head->next;
+    // check if the linked list is correctly populated
+    skiplist_node_t* current = head->next;
     int value = 0;
     while (current != head)
     {
         printf("current: %d\n", current->value);
         if (current->value != value)
         {
-            perror("error populating skiplist\n");
+            perror("err: populating linked list\n");
             return 1;
         }
         current = current->next;
         value++;
     }
 
-    printf("allocated %d blocks\n", i);
+    printf("%d blocks free\n", v);
 
-    // place intermediate pointers
-    int segment_length = N_BLOCKS / N_ACCESS_POINTS;
-    printf("segment length: %d\n", segment_length);
+    // initialize access points
+    SEGMENT_LEN = NFREE / N_ACCESS_POINTS;
     current = head->next;
     for (int i = 0; i < N_ACCESS_POINTS; i++)
     {
         access_points[i].next = current;
+        access_points[i].prev = current->prev;
         access_points[i].value = current->value;
 
-        for (int j = 0; j < segment_length; j++)
+        for (int j = 0; j < SEGMENT_LEN; j++)
         {
+            current->access_point_index = i;
             current = current->next;
         }
     }
 
-    // check if the access_points pointers are correctly placed
     for (int i = 0; i < N_ACCESS_POINTS; i++)
     {
-        printf("access_points[%d]: %d\n", i, access_points[i].value);
+        printf("access point %d: %d\n", i, access_points[i].value);
     }
 
     // open file with requests
@@ -211,11 +194,12 @@ int main(int argc, char* argv[])
 
     while (fgets(line, sizeof(line), file))
     {
+        int values_read;
         int request_size = 0;
         char request_type = 0;
-        scanf(line, "%c %d", &request_type, &request_size);
-        #if PREFETCH
-        #else
+
+        values_read = sscanf(line, "%c %d", &request_type, &request_size);
+
         // allocate so remove from free list
         if (request_type == 'a')
         {
@@ -231,7 +215,6 @@ int main(int argc, char* argv[])
         {
 
         }
-        #endif
     }
 
     fclose(file);
