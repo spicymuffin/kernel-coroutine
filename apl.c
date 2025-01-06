@@ -3,13 +3,13 @@
 
 #include "common.c"
 
-typedef struct skiplist_node
+typedef struct apl_node
 {
     int value;
     int access_point_index; // the index of the access point that this node belongs to
-    struct skiplist_node* next;
-    struct skiplist_node* prev;
-} skiplist_node_t;
+    struct apl_node* next;
+    struct apl_node* prev;
+} apl_node_t;
 
 #define N_ACCESS_POINTS 4
 
@@ -22,11 +22,11 @@ FILE* file;
 char line[1024];
 int intermediate_ptr = 0;
 
-skiplist_node_t* head = NULL;
-skiplist_node_t* list = NULL;
+apl_node_t* head = NULL;
+apl_node_t* list = NULL;
 
 int pos = 0; // active access point index
-skiplist_node_t access_points[N_ACCESS_POINTS];
+apl_node_t access_points[N_ACCESS_POINTS];
 
 inline void increment_pos()
 {
@@ -38,22 +38,22 @@ inline void decrement_pos()
     pos = (pos - 1 + N_ACCESS_POINTS) % N_ACCESS_POINTS;
 }
 
-void skiplist_delete_single()
+void apl_delete_single()
 {
-    skiplist_node_t* deleted = access_points[pos].next;
+    apl_node_t* deleted = access_points[pos].next;
     DELETE_NODE(deleted);
     increment_pos();
 }
 
-void skiplist_insert_single(skiplist_node_t* node)
+void apl_insert_single(apl_node_t* node)
 {
     decrement_pos();
-    skiplist_node_t* insert_before = access_points[pos].next;
+    apl_node_t* insert_before = access_points[pos].next;
     INSERT_NODE_BEFORE(insert_before, node);
     node->access_point_index = pos;
 }
 
-void skiplist_delete_by_reference(skiplist_node_t* node)
+void apl_delete_by_reference(apl_node_t* node)
 {
     if (node->access_point_index == pos)
     {
@@ -63,12 +63,17 @@ void skiplist_delete_by_reference(skiplist_node_t* node)
     else
     {
         // node that we are going to move to rebalance access points
-        skiplist_node_t* rebalancing_node = access_points[pos].next;
+        apl_node_t* rebalancing_node = access_points[pos].next;
         // remove rebalancing node from rebalancing access point so its dangling
         DELETE_NODE(rebalancing_node);
 
         // implicit removal of node from its access point
-        skiplist_node_t* next = node->next;
+        // the node is not in the list anymore, but it still has references to the nodes
+        // it was previously linked to
+
+        // but that doesnt matter bc once we give the block to the user, the references
+        // are gone
+        apl_node_t* next = node->next;
         rebalancing_node->prev = &access_points[node->access_point_index];
         access_points[node->access_point_index].next = rebalancing_node;
         rebalancing_node->next = next;
@@ -96,7 +101,7 @@ int main(int argc, char* argv[])
     }
 
     // populate the linked list
-    head = (skiplist_node_t*)malloc(sizeof(skiplist_node_t));
+    head = (apl_node_t*)malloc(sizeof(apl_node_t));
 
     if (head == NULL)
     {
@@ -115,7 +120,7 @@ int main(int argc, char* argv[])
         NFREE = atoi(line);
     }
 
-    list = (skiplist_node_t*)malloc(NBLOCKS * sizeof(skiplist_node_t));
+    list = (apl_node_t*)malloc(NBLOCKS * sizeof(apl_node_t));
 
     if (list == NULL)
     {
@@ -125,13 +130,13 @@ int main(int argc, char* argv[])
 
     // populate the linked list
     int v = 0;
-    skiplist_node_t* prev = head;
+    apl_node_t* prev = head;
     while (fgets(line, sizeof(line), file))
     {
         int free = atoi(line);
         if (free)
         {
-            skiplist_node_t* node = &list[v];
+            apl_node_t* node = &list[v];
             node->value = v;
             prev->next = node;
             node->prev = prev;
@@ -147,7 +152,7 @@ int main(int argc, char* argv[])
     fclose(file);
 
     // check if the linked list is correctly populated
-    skiplist_node_t* current = head->next;
+    apl_node_t* current = head->next;
     int value = 0;
     while (current != head)
     {
