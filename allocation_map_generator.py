@@ -1,7 +1,7 @@
 import random
 
 NBLOCKS = 1024 * 1024  # number of blocks (allocated or free)
-NFREE = 1024 * 512  # number of free blocks
+NFREE = 1024 * 1024  # number of free blocks
 
 # generate allocation map
 allocation_map = [0] * NBLOCKS

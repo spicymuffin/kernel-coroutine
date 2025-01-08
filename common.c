@@ -1,3 +1,55 @@
+#ifndef _COMMON_H_
+#define _COMMON_H_
+
+#include <stdio.h>
+#include <stdlib.h> 
+#include <time.h>
+
+#define L1_CACHE_SIZE_KB 48
+#define ELEMENT_SIZE 64
+
+#define MAX_KB 64
+
+static char   g_buffer[MAX_KB * 1024];
+static size_t g_indices[(MAX_KB * 1024) / ELEMENT_SIZE];
+
+static void overwrite_x_kb_l1(int KB)
+{
+    if (KB > MAX_KB)
+    {
+        KB = MAX_KB;
+    }
+
+    size_t total_bytes = (size_t)KB * 1024;
+    size_t line_count = total_bytes / ELEMENT_SIZE;
+
+    srand((unsigned int)time(NULL));
+
+    for (size_t i = 0; i < total_bytes; i++)
+    {
+        g_buffer[i] = (char)(rand() & 0xFF);
+    }
+
+    for (size_t i = 0; i < line_count; i++)
+    {
+        g_indices[i] = i;
+    }
+
+    for (size_t i = line_count - 1; i > 0; i--)
+    {
+        size_t j = rand() % (i + 1);
+        size_t tmp = g_indices[i];
+        g_indices[i] = g_indices[j];
+        g_indices[j] = tmp;
+    }
+
+    for (size_t i = 0; i < line_count; i++)
+    {
+        size_t offset = g_indices[i] * ELEMENT_SIZE;
+        g_buffer[offset] ^= (char)rand();
+    }
+}
+
 // delete node (unsafe - does not check if node is head)
 #define DELETE_NODE(node) do {         \
     (node)->prev->next = (node)->next; \
@@ -19,3 +71,5 @@
     (insert_before)->prev->next = (node);            \
     (insert_before)->prev = (node);                  \
 } while(0)
+
+#endif

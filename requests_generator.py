@@ -1,8 +1,8 @@
 import random
 
-N = 10000
+MAX_ALLOC_REQUEST_SZ = 2016
 
-f = open("allocation_map.txt", "r")
+f = open("allocation_map_1mil.txt", "r")
 NBLOCKS = int(f.readline())
 NFREE = int(f.readline())
 
@@ -10,9 +10,11 @@ allocation_map = [0] * NBLOCKS
 
 freelist = [0] * NBLOCKS
 freelistptr = 0
+freelistsz = NFREE
 
 alloclist = [0] * NBLOCKS
 alloclistptr = 0
+alloclistsz = NBLOCKS - NFREE
 
 for i in range(NBLOCKS):
     allocation_map[i] = int(f.readline())
@@ -25,13 +27,51 @@ for i in range(NBLOCKS):
 
 f.close()
 
+NALLOC = 1024 * 1024
+NFREE = 0
+
+alloced_blocks = 0
+freed_blocks = 0
+
 f = open("requests.txt", "w")
 
-for i in range(N):
-    # a for allocate
-    # f for free
-    # m for move
-    s = "a " + str(random.randint(1, 200))
-    f.write(s + "\n")
+while alloced_blocks < NALLOC or freed_blocks < NFREE:
+    if freelistsz > 0 and alloced_blocks < NALLOC:
+        alloccnt = random.randint(1, MAX_ALLOC_REQUEST_SZ)
+
+        if (freelistsz < alloccnt):
+            alloccnt = freelistsz
+
+        f.write("a " + str(alloccnt) + "\n")
+
+        for j in range(alloccnt):
+            allocidx = random.randint(0, freelistptr - 1)
+            alloccnt = freelist[allocidx]
+            alloclist[alloclistptr] = alloccnt
+            alloclistptr += 1
+            alloclistsz += 1
+
+            freelist[allocidx] = freelist[freelistptr - 1]
+            freelistptr -= 1
+            freelistsz -= 1
+
+            alloced_blocks += 1
+
+    elif alloclistsz > 0 and freed_blocks < NFREE:
+        freeidx = random.randint(0, alloclistptr - 1)
+        alloccnt = alloclist[freeidx]
+        f.write("f " + str(alloccnt) + "\n")
+        freelist[freelistptr] = alloccnt
+        freelistptr += 1
+        freelistsz += 1
+
+        alloclist[freeidx] = alloclist[alloclistptr - 1]
+        alloclistptr -= 1
+        alloclistsz -= 1
+
+        freed_blocks += 1
+
+print("alloced_blocks:", alloced_blocks)
+print("freed_blocks:", freed_blocks)
 
 f.close()
