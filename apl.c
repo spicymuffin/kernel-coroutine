@@ -16,7 +16,7 @@ typedef struct apl_node
 
 #define AMAC 1
 #define APL_DEBUG_METRICS 1
-#define N_ACCESS_POINTS 4
+#define N_ACCESS_POINTS 16
 
 int ONLY_BENCHMARK = 0;
 
@@ -193,21 +193,18 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    int blocks_free = 0;
     // populate the linked list
-    int v = 0;
     apl_node_t* prev = head;
     while (fgets(line, sizeof(line), file))
     {
-        int free = atoi(line);
-        if (free)
-        {
-            apl_node_t* node = &list[v];
-            node->value = v;
-            prev->next = node;
-            node->prev = prev;
-            v++;
-            prev = node;
-        }
+        int block_idx = atoi(line);
+        apl_node_t* node = &list[block_idx];
+        node->value = blocks_free;
+        prev->next = node;
+        node->prev = prev;
+        prev = node;
+        blocks_free++;
     }
 
     // link last node to head
@@ -227,13 +224,14 @@ int main(int argc, char* argv[])
             perror("err: populating linked list\n");
             return 1;
         }
+        // printf("slot: %ld\n", current - list);
         current = current->next;
         value++;
     }
 
     if (!ONLY_BENCHMARK)
     {
-        printf("%d blocks free\n", v);
+        printf("%d blocks free\n", blocks_free);
     }
 
     // initialize access points
@@ -345,6 +343,7 @@ int main(int argc, char* argv[])
                 }
                 else if (worker->stage == 2)
                 {
+                    // printf("deleteing node no. %d\n", (list + access_points[pos].next->value) - access_points);
                     apl_delete_single();
 
                     // if there are more requests than workers, we know that this worker will

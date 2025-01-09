@@ -2,7 +2,7 @@ import subprocess
 
 executable_path = './apl'
 
-args = ['allocation_map.txt', 'requests.txt', '1']
+args = ['1mil/allocation_map.txt', '1mil/alloc_all.txt', '1']
 
 command = [executable_path] + args
 

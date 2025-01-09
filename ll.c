@@ -111,20 +111,18 @@ int main(int argc, char* argv[])
     }
 
     // populate the linked list
-    int v = 0;
+    int blocks_free = 0;
+    // populate the linked list
     ll_node_t* prev = head;
     while (fgets(line, sizeof(line), file))
     {
-        int free = atoi(line);
-        if (free)
-        {
-            ll_node_t* node = &list[v];
-            node->value = v;
-            prev->next = node;
-            node->prev = prev;
-            v++;
-            prev = node;
-        }
+        int block_idx = atoi(line);
+        ll_node_t* node = &list[block_idx];
+        node->value = blocks_free;
+        prev->next = node;
+        node->prev = prev;
+        prev = node;
+        blocks_free++;
     }
 
     // link last node to head
@@ -150,7 +148,7 @@ int main(int argc, char* argv[])
 
     if (!ONLY_BENCHMARK)
     {
-        printf("%d blocks free\n", v);
+        printf("%d blocks free\n", blocks_free);
     }
 
     // open file with requests
@@ -194,7 +192,6 @@ int main(int argc, char* argv[])
                 ll_delete_after_head();
                 n_requests++;
             }
-            // overwrite_x_kb_l1(48);
         }
         // free so add to free list
         else if (request_type == 'f')

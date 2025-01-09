@@ -2,7 +2,7 @@ import random
 
 MAX_ALLOC_REQUEST_SZ = 2016
 
-f = open("allocation_map_1mil.txt", "r")
+f = open("8mil/allocation_map_8mil.txt", "r")
 NBLOCKS = int(f.readline())
 NFREE = int(f.readline())
 
@@ -16,19 +16,30 @@ alloclist = [0] * NBLOCKS
 alloclistptr = 0
 alloclistsz = NBLOCKS - NFREE
 
+while True:
+    line = f.readline()
+    if not line:
+        break
+    freeidx = int(line)
+    allocation_map[freeidx] = 1
+    freelist[freelistptr] = freeidx
+    freelistptr += 1
+
 for i in range(NBLOCKS):
-    allocation_map[i] = int(f.readline())
-    if allocation_map[i] == 1:
-        freelist[freelistptr] = i
-        freelistptr += 1
-    else:
+    if allocation_map[i] == 0:
         alloclist[alloclistptr] = i
         alloclistptr += 1
 
+print("freelistptr:", freelistptr)
+print("freelistsz:", freelistsz)
+
+print("alloclistptr:", alloclistptr)
+print("alloclistsz:", alloclistsz)
+
 f.close()
 
-NALLOC = 1024 * 1024
-NFREE = 1024 * 1024
+NALLOC = 1024 * 1024 * 8
+NFREE = 1024 * 1024 * 8
 
 alloced_blocks = 0
 freed_blocks = 0
@@ -62,7 +73,7 @@ while alloced_blocks < NALLOC or freed_blocks < NFREE:
     elif a == 2 and freelistsz > 0 and alloced_blocks < NALLOC:
         allocidx = random.randint(0, freelistptr - 1)
         allocaddr = freelist[allocidx]
-        
+
         f.write("d " + str(allocaddr) + "\n")
 
         alloclist[alloclistptr] = allocaddr
