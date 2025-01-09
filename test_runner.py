@@ -1,8 +1,8 @@
 import subprocess
 
-executable_path = './ll'
+executable_path = './apl'
 
-args = ['allocation_map_1mil.txt', 'requests_1mil/alloc_all.txt', '1']
+args = ['allocation_map.txt', 'requests.txt', '1']
 
 command = [executable_path] + args
 

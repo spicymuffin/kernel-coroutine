@@ -6,7 +6,7 @@
 
 typedef struct ll_node
 {
-    int padding[1019]; // 1019 * 4 = 4076 byte
+    int padding[6]; // 6 * 4 = 24 byte  
     int value; // 4 byte
     struct ll_node* next; // 8 byte
     struct ll_node* prev; // 8 byte
@@ -67,12 +67,12 @@ int main(int argc, char* argv[])
         printf("ll_node_t size: %lu\n", sizeof(ll_node_t));
     }
 
-    // node size check
-    if (sizeof(ll_node_t) != 4096)
-    {
-        perror("err: ll_node_t size is not 4096");
-        return 1;
-    }
+    // // node size check
+    // if (sizeof(ll_node_t) != 4096)
+    // {
+    //     perror("err: ll_node_t size is not 4096");
+    //     return 1;
+    // }
 
     // open file with allocation map
     file = fopen(argv[1], "r");
@@ -167,6 +167,11 @@ int main(int argc, char* argv[])
     }
     overwrite_x_kb_l1(L1_CACHE_SIZE_KB);
 
+    if (!ONLY_BENCHMARK)
+    {
+        printf("starting benchmark\n");
+    }
+
     int n_requests = 0;
 
     // start timer
@@ -189,7 +194,7 @@ int main(int argc, char* argv[])
                 ll_delete_after_head();
                 n_requests++;
             }
-            // overwrite_x_kb_l1(4);
+            // overwrite_x_kb_l1(48);
         }
         // free so add to free list
         else if (request_type == 'f')
