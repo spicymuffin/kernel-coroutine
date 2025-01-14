@@ -1,6 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h> 
 #include <time.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <string.h>
 
 #include "common.c"
 
@@ -18,6 +23,17 @@ int N_BLOCKS = 0;
 int N_FREE = 0;
 
 FILE* file;
+
+#define PERF_CTL 0
+
+#if PERF_CTL
+const char* ctl_fifo = "/tmp/perf_ctl_pipe";
+const char* ack_fifo = "/tmp/perf_ack_pipe";
+
+int ctl_pipe;
+int ack_pipe;
+#endif
+
 char line[1024];
 int intermediate_ptr = 0;
 
@@ -27,14 +43,20 @@ ll_node_t* list = NULL;
 
 void ll_delete_after_head()
 {
-    if (head->next == head)
-    {
-        // empty list
-        // treat as critical error
-        perror("err: ll_delete_after_head - empty list");
-        exit(1);
-    }
-    DELETE_NODE(head->next);
+    // if (head->next == head)
+    // {
+    //     // empty list
+    //     // treat as critical error
+    //     perror("err: ll_delete_after_head - empty list");
+    //     exit(1);
+    // }
+
+    ll_node_t* to_delete = head->next;
+
+    DELETE_NODE(to_delete);
+
+    // printf("deleting node no. %d\n", to_delete->value);
+    // printf("deleted node has index: %ld\n", to_delete - list);
 }
 
 void ll_insert_after_head(ll_node_t* node)
@@ -62,17 +84,15 @@ int main(int argc, char* argv[])
         ONLY_BENCHMARK = atoi(argv[3]);
     }
 
+    #if PERF_CTL
+    ctl_pipe = open(ctl_fifo, O_WRONLY);
+    ack_pipe = open(ack_fifo, O_RDONLY);
+    #endif
+
     if (!ONLY_BENCHMARK)
     {
         printf("ll_node_t size: %lu\n", sizeof(ll_node_t));
     }
-
-    // // node size check
-    // if (sizeof(ll_node_t) != 4096)
-    // {
-    //     perror("err: ll_node_t size is not 4096");
-    //     return 1;
-    // }
 
     // open file with allocation map
     file = fopen(argv[1], "r");
@@ -172,6 +192,13 @@ int main(int argc, char* argv[])
 
     int n_requests = 0;
 
+    #if PERF_CTL
+    char ack_buf[5];
+    memset(ack_buf, 0, 5);
+    write(ctl_pipe, "enable\n", 7);
+    read(ack_pipe, ack_buf, 4);
+    #endif
+
     // start timer
     clock_t benchmark_start_ts = clock();
 
@@ -202,26 +229,56 @@ int main(int argc, char* argv[])
         // d so remove by reference
         else if (request_type == 'd')
         {
+            ll_delete_by_reference(&list[request_arg]);
             n_requests++;
         }
     }
 
     clock_t benchmark_end_ts = clock();
 
+    #if PERF_CTL
+    memset(ack_buf, 0, 5);
+    write(ctl_pipe, "disable\n", 8);
+    read(ack_pipe, ack_buf, 4);
+
+    close(ctl_pipe);
+    close(ack_pipe);
+    #endif
+
     if (!ONLY_BENCHMARK)
     {
         printf("benchmark time: %f\n", (double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC);
         printf("benchmark requests: %d\n", n_requests);
-        printf("benchmark requests per second: %f\n", (double)n_requests / ((double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC));
+        printf("benchmark requests per second: %f\n", (double)n_requests / ((double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC) / 1000000.0f);
     }
     else
     {
         printf("%d\n", N_BLOCKS);
         printf("%f\n", (double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC);
         printf("%d\n", n_requests);
-        printf("%f\n", (double)n_requests / ((double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC));
+        printf("%f\n", (double)n_requests / ((double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC) / 1000000.0f);
     }
     fclose(file);
+
+    // check that the freelist is empty
+    if (!ONLY_BENCHMARK)
+    {
+        printf("empty: %d\n", head->next == head);
+    }
+
+    // count the number of nodes in the list
+    int count = 0;
+    current = head->next;
+    while (current != head)
+    {
+        count++;
+        current = current->next;
+    }
+
+    if (!ONLY_BENCHMARK)
+    {
+        printf("count: %d\n", count);
+    }
 
     return 0;
 }
