@@ -2,6 +2,11 @@
 #include <stdlib.h> 
 #include <time.h>
 #include <immintrin.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <string.h>
 
 #include "common.c"
 
@@ -26,6 +31,17 @@ int N_FREE = 0;
 int SEGMENT_LEN = 0;
 
 FILE* file;
+
+#define PERF_CTL 1
+
+#if PERF_CTL
+const char* ctl_fifo = "/tmp/perf_ctl_pipe";
+const char* ack_fifo = "/tmp/perf_ack_pipe";
+
+int ctl_pipe;
+int ack_pipe;
+#endif
+
 char line[1024];
 
 apl_node_t* head = NULL;
@@ -36,7 +52,7 @@ apl_node_t access_points[N_ACCESS_POINTS];
 
 #if AMAC
 
-#define PREFETCH 1
+#define PREFETCH 0
 
 #if PREFETCH
 #define BUILTIN_PREFETCH 1
@@ -72,8 +88,12 @@ static inline void decrement_pos()
 
 void apl_delete_single()
 {
-    apl_node_t* deleted = access_points[pos].next;
-    DELETE_NODE(deleted);
+    apl_node_t* to_delete = access_points[pos].next;
+
+    DELETE_NODE(to_delete);
+
+    // printf("deleting node no. %d\n", to_delete->value);
+    // printf("deleted node has index: %ld\n", to_delete - list);
 
     #if APL_DEBUG_METRICS
     access_point_counts[pos]--;
@@ -133,7 +153,6 @@ void apl_delete_by_reference(apl_node_t* node)
 
 int main(int argc, char* argv[])
 {
-
     // quick sanity check
     if (argc < 3)
     {
@@ -146,16 +165,15 @@ int main(int argc, char* argv[])
         ONLY_BENCHMARK = atoi(argv[3]);
     }
 
+    #if PERF_CTL
+    ctl_pipe = open(ctl_fifo, O_WRONLY);
+    ack_pipe = open(ack_fifo, O_RDONLY);
+    #endif
+
     if (!ONLY_BENCHMARK)
     {
         printf("apl_node_t size: %lu\n", sizeof(apl_node_t));
     }
-    // // node size check
-    // if (sizeof(apl_node_t) != 4096)
-    // {
-    //     perror("err: apl_node_t size is not 4096");
-    //     return 1;
-    // }
 
     // open file with allocation map
     file = fopen(argv[1], "r");
@@ -239,8 +257,7 @@ int main(int argc, char* argv[])
     current = head->next;
     for (int i = 0; i < N_ACCESS_POINTS; i++)
     {
-        access_points[i].next = current;
-        access_points[i].prev = current->prev;
+        INSERT_NODE_BEFORE(current, &access_points[i]);
         access_points[i].value = current->value;
 
         for (int j = 0; j < SEGMENT_LEN; j++)
@@ -292,6 +309,13 @@ int main(int argc, char* argv[])
 
     int n_requests = 0;
 
+    #if PERF_CTL
+    char ack_buf[5];
+    memset(ack_buf, 0, 5);
+    write(ctl_pipe, "enable\n", 7);
+    read(ack_pipe, ack_buf, 4);
+    #endif
+
     // start timer
     clock_t benchmark_start_ts = clock();
 
@@ -332,6 +356,7 @@ int main(int argc, char* argv[])
                 {
                     worker->node = access_points[worker_ptr].next;
                     worker->stage = 2;
+
                     #if PREFETCH
                     #if BUILTIN_PREFETCH
                     // prefetch next for fast delete
@@ -353,6 +378,7 @@ int main(int argc, char* argv[])
                         // after delete, the node after the deleted node
                         // is already prefetched so we can just access it directly with no penalty
                         worker->node = access_points[worker_ptr].next;
+                        
                         #if PREFETCH
                         #if BUILTIN_PREFETCH
                         __builtin_prefetch(worker->node->next, 0, 3);
@@ -415,6 +441,16 @@ int main(int argc, char* argv[])
     }
 
     clock_t benchmark_end_ts = clock();
+
+    #if PERF_CTL
+    memset(ack_buf, 0, 5);
+    write(ctl_pipe, "disable\n", 8);
+    read(ack_pipe, ack_buf, 4);
+
+    close(ctl_pipe);
+    close(ack_pipe);
+    #endif
+
     if (!ONLY_BENCHMARK)
     {
         printf("debug metrics:\n");
@@ -434,16 +470,36 @@ int main(int argc, char* argv[])
     {
         printf("benchmark time: %f\n", (double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC);
         printf("benchmark requests: %d\n", n_requests);
-        printf("benchmark requests per second: %f\n", (double)n_requests / ((double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC));
+        printf("benchmark requests per second: %f\n", (double)n_requests / ((double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC) / 1000000.0f);
     }
     else
     {
         printf("%d\n", N_BLOCKS);
         printf("%f\n", (double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC);
         printf("%d\n", n_requests);
-        printf("%f\n", (double)n_requests / ((double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC));
+        printf("%f\n", (double)n_requests / ((double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC) / 1000000.0f);
     }
     fclose(file);
+
+    // check that the freelist is empty
+    if (!ONLY_BENCHMARK)
+    {
+        printf("empty: %d\n", access_points[N_ACCESS_POINTS - 1].next == head);
+    }
+
+    // count the number of nodes in the list
+    int count = 0;
+    current = head->next;
+    while (current != head)
+    {
+        count++;
+        current = current->next;
+    }
+
+    if (!ONLY_BENCHMARK)
+    {
+        printf("count: %d\n", count);
+    }
 
     return 0;
 }
