@@ -24,7 +24,7 @@ int N_FREE = 0;
 
 FILE* file;
 
-#define PERF_CTL 1
+#define PERF_CTL 0
 
 #if PERF_CTL
 const char* ctl_fifo = "/tmp/perf_ctl_pipe";

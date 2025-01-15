@@ -21,7 +21,7 @@ typedef struct apl_node
 
 #define AMAC 1
 #define APL_DEBUG_METRICS 1
-#define N_ACCESS_POINTS 16
+#define N_ACCESS_POINTS 4
 
 int ONLY_BENCHMARK = 0;
 
@@ -32,7 +32,7 @@ int SEGMENT_LEN = 0;
 
 FILE* file;
 
-#define PERF_CTL 1
+#define PERF_CTL 0
 
 #if PERF_CTL
 const char* ctl_fifo = "/tmp/perf_ctl_pipe";
@@ -53,7 +53,6 @@ apl_node_t access_points[N_ACCESS_POINTS];
 #if AMAC
 
 #define PREFETCH 1
-
 #if PREFETCH
 #define BUILTIN_PREFETCH 1
 #define IMMINTRIN_PREFETCH 0
@@ -86,6 +85,73 @@ static inline void decrement_pos()
     pos = (pos - 1 + N_ACCESS_POINTS) % N_ACCESS_POINTS;
 }
 
+// display list structure
+void apl_display_list()
+{
+    apl_node_t* current = head;
+    int it = 0;
+    do
+    {
+        printf("-----------node %d-----------\n", it++);
+        printf("value: %d\n", current->value);
+        printf("slot: %ld\n", current - list);
+        printf("ap idx: %d\n", current->access_point_index);
+        printf("ap?: %d head?: %d\n", current->value < 0, current == head);
+        current = current->next;
+
+        // N_BLOCKS for # of nodes that are blocks
+        // N_ACCESS_POINTS for # of access points
+        // 1 for head
+        // 1 to account for 0 indexing
+        if (it > N_BLOCKS + N_ACCESS_POINTS + 1 + 1)
+        {
+            perror("err: count exceeded");
+            exit(1);
+        }
+
+    } while (current != head);
+}
+
+// display node counts in all access points
+void apl_count_nodes()
+{
+    int max_count = 0b10000000000000000000000000000000;
+    int min_count = 0b01111111111111111111111111111111;
+
+    for (int i = 0; i < N_ACCESS_POINTS; i++)
+    {
+        apl_node_t* current = access_points[i].next;
+        int count = 0;
+        while (current != &access_points[(i + 1) % N_ACCESS_POINTS])
+        {
+            if (current != head)
+            {
+                count++;
+            }
+            current = current->next;
+        }
+
+        if (count > max_count)
+        {
+            max_count = count;
+        }
+        else if (count < min_count)
+        {
+            min_count = count;
+        }
+
+        printf("access point %d count: %d\n", i, count);
+    }
+
+    if (max_count - min_count > 1)
+    {
+        printf("max_count: %d\n", max_count);
+        printf("min_count: %d\n", min_count);
+        perror("err: imbalance");
+        exit(1);
+    }
+}
+
 void apl_delete_single()
 {
     apl_node_t* to_delete = access_points[pos].next;
@@ -100,6 +166,8 @@ void apl_delete_single()
     #endif
 
     increment_pos();
+
+    apl_count_nodes();
 }
 
 void apl_insert_single(apl_node_t* node)
@@ -114,8 +182,20 @@ void apl_insert_single(apl_node_t* node)
     #endif
 }
 
+int dcnt = 0;
+
 void apl_delete_by_reference(apl_node_t* node)
 {
+    // printf("------------------------------------------------\n");
+    // printf("pos: %d\n", pos);
+    // apl_display_list();
+
+    // printf("| node value: %d\n", node->value);
+    // printf("| node slot: %ld\n", node - list);
+    // printf("| node access point: %d\n", node->access_point_index);
+
+    // dcnt++;
+
     #if APL_DEBUG_METRICS
     access_point_counts[pos]--;
     #endif
@@ -129,6 +209,12 @@ void apl_delete_by_reference(apl_node_t* node)
     {
         // node that we are going to move to rebalance access points
         apl_node_t* rebalancing_node = access_points[pos].next;
+
+        // printf("pos: %d\n", pos);
+        // printf("| rebalancing node value: %d\n", rebalancing_node->value);
+        // printf("| rebalancing node slot: %ld\n", rebalancing_node - list);
+        // printf("| rebalancing node access point: %d\n", rebalancing_node->access_point_index);
+
         // remove rebalancing node from rebalancing access point so its dangling
         DELETE_NODE(rebalancing_node);
 
@@ -136,19 +222,36 @@ void apl_delete_by_reference(apl_node_t* node)
         // the node is not in the list anymore, but it still has references to the nodes
         // it was previously linked to
         apl_node_t* next = node->next;
+        apl_node_t* prev = node->prev;
 
         // fix left link
-        rebalancing_node->prev = &access_points[node->access_point_index];
-        access_points[node->access_point_index].next = rebalancing_node;
+        rebalancing_node->prev = prev;
+        prev->next = rebalancing_node;
 
         // fix right link
         rebalancing_node->next = next;
         next->prev = rebalancing_node;
 
+        // printf("rebalancing node value: %d\n", rebalancing_node->value);
+        // printf("rebalancing node next value: %d\n", rebalancing_node->next->value);
+        // printf("rebalancing node prev value: %d\n", rebalancing_node->prev->value);
+        // printf("rebalancing node prev prev value: %d\n", rebalancing_node->prev->prev->value);
+
         rebalancing_node->access_point_index = node->access_point_index;
 
         increment_pos();
+
+        // poison node
+        node->next = NULL;
+        node->prev = NULL;
     }
+
+    
+    // apl_display_list();
+    // apl_count_nodes();
+    // printf("pos: %d\n", pos);
+    // printf("dcnt: %d\n", dcnt);
+    // printf("------------------------------------------------\n");
 }
 
 int main(int argc, char* argv[])
@@ -258,7 +361,8 @@ int main(int argc, char* argv[])
     for (int i = 0; i < N_ACCESS_POINTS; i++)
     {
         INSERT_NODE_BEFORE(current, &access_points[i]);
-        access_points[i].value = current->value;
+        access_points[i].value = -current->value;
+        access_points[i].access_point_index = -i;
 
         for (int j = 0; j < SEGMENT_LEN; j++)
         {
@@ -378,7 +482,7 @@ int main(int argc, char* argv[])
                         // after delete, the node after the deleted node
                         // is already prefetched so we can just access it directly with no penalty
                         worker->node = access_points[worker_ptr].next;
-                        
+
                         #if PREFETCH
                         #if BUILTIN_PREFETCH
                         __builtin_prefetch(worker->node->next, 0, 3);
@@ -431,10 +535,10 @@ int main(int argc, char* argv[])
         else if (request_type == 'd')
         {
             #if AMAC
-            apl_delete_by_reference(&list[request_arg]);
+            apl_delete_by_reference(list + request_arg);
             n_requests++;
             #else
-            apl_delete_by_reference(&list[request_arg]);
+            apl_delete_by_reference(list + request_arg);
             n_requests++;
             #endif
         }

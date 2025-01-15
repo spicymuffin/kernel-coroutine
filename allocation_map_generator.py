@@ -1,7 +1,7 @@
 import random
 
-NBLOCKS = 1024 * 1024 * 8 # number of blocks (allocated or free)
-NFREE = 1024 * 1024 # number of free blocks
+NBLOCKS = 32 # number of blocks (allocated or free)
+NFREE = 32 # number of free blocks
 
 SHUFFLE = True
 
