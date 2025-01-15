@@ -52,7 +52,7 @@ apl_node_t access_points[N_ACCESS_POINTS];
 
 #if AMAC
 
-#define PREFETCH 0
+#define PREFETCH 1
 
 #if PREFETCH
 #define BUILTIN_PREFETCH 1
