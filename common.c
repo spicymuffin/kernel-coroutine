@@ -50,6 +50,26 @@ static void overwrite_x_kb_l1(int KB)
     }
 }
 
+// this function is used to flush the pipeline
+// cpuid instruction is used to serialize the pipeline
+// meaning that all instructions issued before cpuid
+// are guaranteed to complete before any instruction
+// issued after cpuid
+static inline void flush_cpu_pipeline()
+{
+    unsigned int a, b, c, d;
+
+    asm volatile (
+        "cpuid"
+        : "=a" (a), "=b" (b), "=c" (c), "=d" (d)
+        : "a" (0)
+        :
+        );
+
+    // prints vendor string (ebx, edx, ecx)
+    // printf("%c%c%c%c%c%c%c%c%c%c%c%c", b & 0xFF, (b >> 8) & 0xFF, (b >> 16) & 0xFF, (b >> 24) & 0xFF, d & 0xFF, (d >> 8) & 0xFF, (d >> 16) & 0xFF, (d >> 24) & 0xFF, c & 0xFF, (c >> 8) & 0xFF, (c >> 16) & 0xFF, (c >> 24) & 0xFF);
+}
+
 // delete node (unsafe - does not check if node is head)
 #define DELETE_NODE(node) do {         \
     (node)->prev->next = (node)->next; \

@@ -2,7 +2,7 @@ import random
 
 MAX_ALLOC_REQUEST_SZ = 2016
 
-f = open("32/allocation_map.txt", "r")
+f = open("100mil/allocation_map.txt", "r")
 NBLOCKS = int(f.readline())
 NFREE = int(f.readline())
 
@@ -38,7 +38,7 @@ print("alloclistsz:", alloclistsz)
 
 f.close()
 
-NALLOC = 32
+NALLOC = 1024 * 1024 * 100
 NFREE = 0
 
 ALLOC_MODE = "batch"  # "batch" or "targeted"
@@ -89,7 +89,7 @@ while alloced_blocks < NALLOC or freed_blocks < NFREE:
             freelistsz -= 1
 
             alloced_blocks += 1
-            # print("alloced_blocks:", alloced_blocks)
+
     else:
         if alloclistsz > 0 and freed_blocks < NFREE:
             freeidx = random.randint(0, alloclistptr - 1)

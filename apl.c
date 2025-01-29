@@ -19,9 +19,12 @@ typedef struct apl_node
     struct apl_node* prev; // 8 byte
 } apl_node_t;
 
-#define AMAC 1
+#define AMAC 0
 #define APL_DEBUG_METRICS 1
-#define N_ACCESS_POINTS 4
+#define N_ACCESS_POINTS 32
+#define VTUNE_CTL 1
+#define PERF_CTL 1 
+#define CPU_PIPELINE_FLUSH 0
 
 int ONLY_BENCHMARK = 0;
 
@@ -32,7 +35,9 @@ int SEGMENT_LEN = 0;
 
 FILE* file;
 
-#define PERF_CTL 0
+#if VTUNE_CTL
+#include <ittnotify.h>
+#endif
 
 #if PERF_CTL
 const char* ctl_fifo = "/tmp/perf_ctl_pipe";
@@ -52,7 +57,7 @@ apl_node_t access_points[N_ACCESS_POINTS];
 
 #if AMAC
 
-#define PREFETCH 1
+#define PREFETCH 0
 #if PREFETCH
 #define BUILTIN_PREFETCH 1
 #define IMMINTRIN_PREFETCH 0
@@ -152,6 +157,7 @@ void apl_count_nodes()
     }
 }
 
+
 void apl_delete_single()
 {
     apl_node_t* to_delete = access_points[pos].next;
@@ -167,7 +173,8 @@ void apl_delete_single()
 
     increment_pos();
 
-    apl_count_nodes();
+    // printf("deleting node no. %d\n", to_delete->value);
+    // printf("deleted node slot: %ld\n", to_delete - list);
 }
 
 void apl_insert_single(apl_node_t* node)
@@ -246,7 +253,7 @@ void apl_delete_by_reference(apl_node_t* node)
         node->prev = NULL;
     }
 
-    
+
     // apl_display_list();
     // apl_count_nodes();
     // printf("pos: %d\n", pos);
@@ -413,6 +420,10 @@ int main(int argc, char* argv[])
 
     int n_requests = 0;
 
+    #if VTUNE_CTL
+    __itt_resume();
+    #endif
+
     #if PERF_CTL
     char ack_buf[5];
     memset(ack_buf, 0, 5);
@@ -515,6 +526,9 @@ int main(int argc, char* argv[])
             {
                 apl_delete_single();
                 n_requests++;
+                #if CPU_PIPELINE_FLUSH
+                flush_cpu_pipeline();
+                #endif
             }
 
             #endif
@@ -545,6 +559,10 @@ int main(int argc, char* argv[])
     }
 
     clock_t benchmark_end_ts = clock();
+
+    #if VTUNE_CTL
+    __itt_pause();
+    #endif
 
     #if PERF_CTL
     memset(ack_buf, 0, 5);
@@ -584,6 +602,9 @@ int main(int argc, char* argv[])
         printf("%f\n", (double)n_requests / ((double)(benchmark_end_ts - benchmark_start_ts) / CLOCKS_PER_SEC) / 1000000.0f);
     }
     fclose(file);
+
+    free(list);
+    free(head);
 
     // check that the freelist is empty
     if (!ONLY_BENCHMARK)
