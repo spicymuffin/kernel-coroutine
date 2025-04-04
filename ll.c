@@ -11,7 +11,7 @@
 
 typedef struct ll_node
 {
-    int padding[6]; // 6 * 4 = 24 byte  
+    int padding[6]; // 6 * 4 = 24 byte
     int value; // 4 byte
     struct ll_node* next; // 8 byte
     struct ll_node* prev; // 8 byte
@@ -226,6 +226,7 @@ int main(int argc, char* argv[])
         {
             for (int i = 0; i < request_arg; i++)
             {
+                volatile int hash = int_hash(123, 999, i);
                 ll_delete_after_head();
                 n_requests++;
                 #if CPU_PIPELINE_FLUSH

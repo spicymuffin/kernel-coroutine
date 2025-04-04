@@ -2,7 +2,7 @@
 #define _COMMON_H_
 
 #include <stdio.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 #include <time.h>
 
 #define L1_CACHE_SIZE_KB 48
@@ -68,6 +68,23 @@ static inline void flush_cpu_pipeline()
 
     // prints vendor string (ebx, edx, ecx)
     // printf("%c%c%c%c%c%c%c%c%c%c%c%c", b & 0xFF, (b >> 8) & 0xFF, (b >> 16) & 0xFF, (b >> 24) & 0xFF, d & 0xFF, (d >> 8) & 0xFF, (d >> 16) & 0xFF, (d >> 24) & 0xFF, c & 0xFF, (c >> 8) & 0xFF, (c >> 16) & 0xFF, (c >> 24) & 0xFF);
+}
+
+static size_t int_hash(int key, size_t num_buckets, int i)
+{
+    unsigned long long x = (unsigned long long)key;
+
+    if (i % 2 == 0)
+    {
+        for (int i = 0; i < 55; i++)
+        {
+            x ^= (x << 13);
+            x ^= (x >> 7);
+            x ^= (x << 17);
+        }
+    }
+
+    return (size_t)(x % num_buckets);
 }
 
 // delete node (unsafe - does not check if node is head)

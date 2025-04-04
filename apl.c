@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 #include <time.h>
 #include <immintrin.h>
 #include <fcntl.h>
@@ -21,9 +21,9 @@ typedef struct apl_node
 
 #define AMAC 0
 #define APL_DEBUG_METRICS 1
-#define N_ACCESS_POINTS 32
+#define N_ACCESS_POINTS 64
 #define VTUNE_CTL 1
-#define PERF_CTL 1 
+#define PERF_CTL 1
 #define CPU_PIPELINE_FLUSH 0
 
 int ONLY_BENCHMARK = 0;
@@ -56,8 +56,7 @@ int pos = 0; // active access point index
 apl_node_t access_points[N_ACCESS_POINTS];
 
 #if AMAC
-
-#define PREFETCH 0
+#define PREFETCH 1
 #if PREFETCH
 #define BUILTIN_PREFETCH 1
 #define IMMINTRIN_PREFETCH 0
@@ -484,6 +483,7 @@ int main(int argc, char* argv[])
                 else if (worker->stage == 2)
                 {
                     // printf("deleteing node no. %d\n", (list + access_points[pos].next->value) - access_points);
+                    volatile int hash = int_hash(123, 999);
                     apl_delete_single();
 
                     // if there are more requests than workers, we know that this worker will
@@ -524,6 +524,7 @@ int main(int argc, char* argv[])
 
             for (int i = 0; i < request_arg; i++)
             {
+                volatile int hash = int_hash(123, 999, i);
                 apl_delete_single();
                 n_requests++;
                 #if CPU_PIPELINE_FLUSH

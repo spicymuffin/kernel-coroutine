@@ -2,40 +2,42 @@
 #include <stdlib.h>
 #include <time.h>
 
-typedef enum { START, PROCEDURE, END, DESTROYED } State;
-
-typedef struct Node
+typedef struct node
 {
     int key;
-    struct Node* next;
-} Node;
+    struct node* next;
+} node_t;
 
-typedef struct
+
+typedef struct hash_table
 {
-    Node** buckets;
+    node_t** buckets;
     size_t num_buckets;
-} HashTable;
+} hash_table_t;
 
-typedef struct
+
+typedef struct task
 {
-    State state;
-    Node* current;
+    node_t* current;
     int key;
-    HashTable* hash_table;
-} CoroutineContext;
+} task_t;
 
-HashTable* build_hash_table(int* keys, size_t key_count, size_t num_buckets)
+#define MAX_TASKS 60
+
+task_t tasks[MAX_TASKS];
+
+hash_table_t* build_hash_table(int* keys, size_t key_count, size_t num_buckets)
 {
-    HashTable* hash_table = malloc(sizeof(HashTable));
+    hash_table_t* hash_table = malloc(sizeof(hash_table_t));
     hash_table->num_buckets = num_buckets;
-    hash_table->buckets = calloc(num_buckets, sizeof(Node*));
+    hash_table->buckets = calloc(num_buckets, sizeof(node_t*));
 
     for (size_t i = 0; i < key_count; i++)
     {
         int key = keys[i];
         size_t bucket_index = key % num_buckets;
 
-        Node* new_node = malloc(sizeof(Node));
+        node_t* new_node = malloc(sizeof(node_t));
         new_node->key = key;
         new_node->next = hash_table->buckets[bucket_index];
         hash_table->buckets[bucket_index] = new_node;
@@ -44,14 +46,15 @@ HashTable* build_hash_table(int* keys, size_t key_count, size_t num_buckets)
     return hash_table;
 }
 
-void free_hash_table(HashTable* hash_table)
+
+void free_hash_table(hash_table_t* hash_table)
 {
     for (size_t i = 0; i < hash_table->num_buckets; i++)
     {
-        Node* node = hash_table->buckets[i];
+        node_t* node = hash_table->buckets[i];
         while (node)
         {
-            Node* temp = node;
+            node_t* temp = node;
             node = node->next;
             free(temp);
         }
@@ -60,48 +63,13 @@ void free_hash_table(HashTable* hash_table)
     free(hash_table);
 }
 
-void coroutine(CoroutineContext* ctx, int* total_ops)
-{
-    size_t bucket_index;
-    switch (ctx->state)
-    {
-    case START:
-        bucket_index = ctx->key % ctx->hash_table->num_buckets;
-        ctx->current = ctx->hash_table->buckets[bucket_index];
-        ctx->state = PROCEDURE;
-        __builtin_prefetch(ctx->current, 0, 1);
-        return;
-
-    case PROCEDURE:
-        if (ctx->current && ctx->current->key == ctx->key)
-        {
-            (*total_ops)++;
-            ctx->state = END;
-        }
-        else if (ctx->current)
-        {
-            ctx->current = ctx->current->next;
-            ctx->state = PROCEDURE;
-            __builtin_prefetch(ctx->current, 0, 1);
-        }
-        else
-        {
-            ctx->state = END;
-        }
-        return;
-
-    case END:
-    case DESTROYED:
-        return;
-    }
-}
 
 int* read_keys_from_file(const char* filename, size_t* key_count)
 {
     FILE* file = fopen(filename, "r");
     if (!file)
     {
-        perror("Failed to open file");
+        fprintf(stderr, "error opening file: %s\n", filename);
         return NULL;
     }
 
@@ -123,10 +91,10 @@ int* read_keys_from_file(const char* filename, size_t* key_count)
     return keys;
 }
 
-int naive_hash_table_search(HashTable* hash_table, int key)
+int naive_hash_table_search(hash_table_t* hash_table, int key)
 {
     size_t bucket_index = key % hash_table->num_buckets;
-    Node* node = hash_table->buckets[bucket_index];
+    node_t* node = hash_table->buckets[bucket_index];
     while (node)
     {
         if (node->key == key)
@@ -157,52 +125,52 @@ int main()
             return 1;
         }
 
-        size_t num_buckets = 1000000;
-        HashTable* hash_table = build_hash_table(keys, key_count, num_buckets);
+        size_t num_buckets = 1000000; // 1 million buckets
+        hash_table_t* hash_table = build_hash_table(keys, key_count, num_buckets);
 
-        // Coroutine-based search
-        for (int num_coroutines = 1; num_coroutines <= 30; num_coroutines++)
+        for (int n_workers = 1; n_workers <= MAX_TASKS; n_workers++)
         {
             int total_ops = 0;
-            CoroutineContext* ctxs = malloc(num_coroutines * sizeof(CoroutineContext));
 
             int key_index = 0;
-            for (int i = 0; i < num_coroutines; i++)
+            for (int i = 0; i < n_workers; i++)
             {
-                ctxs[i].state = START;
-                ctxs[i].current = NULL;
-                ctxs[i].key = keys[key_index % key_count];
-                ctxs[i].hash_table = hash_table;
+                tasks[i].key = keys[key_index % key_count];
+                int bucket_index = tasks[i].key % hash_table->num_buckets;
+                tasks[i].current = hash_table->buckets[bucket_index];
                 key_index++;
             }
 
-            int not_done = num_coroutines;
+            int cr = n_workers;
+
             clock_t start_time = clock();
 
-            while (not_done > 0)
+            while (cr != 0)
             {
-                for (int i = 0; i < num_coroutines; i++)
+                // speculative execution will jump to next task to avoid waiting for data
+                for (int i = 0; i < n_workers; i++)
                 {
-                    if (ctxs[i].state != DESTROYED)
+                    if (tasks[i].key != -1)
                     {
-                        if (ctxs[i].state != END)
+                        if (tasks[i].key == tasks[i].current->key)
                         {
-                            coroutine(&ctxs[i], &total_ops);
-                        }
-                        else
-                        {
+                            total_ops++;
                             if (key_index < key_count)
                             {
-                                ctxs[i].state = START;
-                                ctxs[i].current = NULL;
-                                ctxs[i].key = keys[key_index];
+                                tasks[i].key = keys[key_index % key_count];
+                                int bucket_index = tasks[i].key % hash_table->num_buckets;
+                                tasks[i].current = hash_table->buckets[bucket_index];
                                 key_index++;
                             }
                             else
                             {
-                                ctxs[i].state = DESTROYED;
-                                not_done--;
+                                cr--;
+                                tasks[i].key = -1;
                             }
+                        }
+                        else
+                        {
+                            tasks[i].current = tasks[i].current->next;
                         }
                     }
                 }
@@ -211,11 +179,10 @@ int main()
             clock_t end_time = clock();
             double elapsed_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
             double mops = total_ops / (elapsed_time * 1e6);
-            printf("File: %s, Total ops with %d coroutines: %d, MOPS: %f\n", filenames[file_idx], num_coroutines, total_ops, mops);
-            free(ctxs);
+            printf("file: %s, total ops with %d tasks: %d, MOPS: %f\n", filenames[file_idx], n_workers, total_ops, mops);
         }
 
-        // Naive hash table search
+        // naive hash table search
         clock_t naive_start_time = clock();
         int naive_ops = 0;
         for (size_t i = 0; i < key_count; i++)
@@ -229,7 +196,7 @@ int main()
 
         double naive_elapsed_time = (double)(naive_end_time - naive_start_time) / CLOCKS_PER_SEC;
         double naive_mops = naive_ops / (naive_elapsed_time * 1e6);
-        printf("File: %s, Naive hash table search MOPS: %f\n", filenames[file_idx], naive_mops);
+        printf("file: %s, naive hash table search MOPS: %f\n", filenames[file_idx], naive_mops);
 
         free(keys);
         free_hash_table(hash_table);
